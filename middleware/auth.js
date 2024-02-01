@@ -16,7 +16,7 @@ const authCheck = async (req, res, next) => {
       return res.status(401).json({ message: "token expired", result: false });
     }
     req.user = verifyUser;
-    console.log(req.user);
+    // console.log(req.user);
 
     next();
   } catch (error) {

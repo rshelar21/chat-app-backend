@@ -12,6 +12,7 @@ const loginUser = async (req, res) => {
         .json({ message: "All fields are required", result: false });
     }
     const searchUser = await userModel.findOne({ email });
+    console.log(searchUser);
 
     if (!searchUser)
       return res
@@ -19,13 +20,15 @@ const loginUser = async (req, res) => {
         .json({ message: "User does not exist", result: false });
 
     const checkPassword = await bcrypt.compare(password, searchUser.password);
+    console.log(checkPassword, "checkPassword");
 
-    if (!checkPassword)
+    if (!checkPassword) {
       return res
         .status(404)
         .json({ message: "Invalid Password", status: false });
+    }
 
-    const token =  jwt.sign(
+    const token = await jwt.sign(
       {
         email: searchUser.email,
         id: searchUser._id,
@@ -33,7 +36,17 @@ const loginUser = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
-    res.status(200).json({ message: "Login successful", status: true, token });
+    console.log(token);
+    const data = {
+      name: searchUser.name,
+      userImg: searchUser.userImg,
+      token,
+      _id: searchUser._id,
+      email: searchUser.email,
+    };
+    res
+      .status(200)
+      .json({ message: "Login successful", status: true, user: data });
   } catch (err) {
     res.status(500).json({ message: "Internal server error", status: false });
   }
@@ -61,6 +74,7 @@ const registerUser = async (req, res) => {
       name,
       userImg,
     });
+  
 
     const token = await jwt.sign(
       {
@@ -71,19 +85,23 @@ const registerUser = async (req, res) => {
       { expiresIn: "30d" }
     );
 
+    const data = {
+      name: newUser.name,
+      userImg: newUser.userImg,
+      token,
+      _id: newUser._id,
+      email: newUser.email,
+    }
+
     res.status(200).json({
       message: "User created successfully",
       status: true,
-      name: name,
-      userImg: userImg,
-      token,
+      user : data
     });
   } catch (err) {
-    res.status(500).json({ message: "Internal server error", status: false });
+    res.status(500).json({ message: err.message, status: false });
   }
 };
-
-
 
 module.exports = {
   loginUser,

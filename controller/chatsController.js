@@ -10,11 +10,12 @@ const searchUser = async(req, res) => {
         // if(!search){
         //     return res.status(400).json({message : "Name is required", status : false})
         // }
-        const searchUser = await userModel.find({name : {$regex : search, $options : "i"}}).find({_id : {$ne : req.user.id}})
+        const searchUser = await userModel.find({name : {$regex : search, $options : "i"}})
+        .find({_id : {$ne : req.user.id}}).select("-password");
         console.log(searchUser)
 
-        if(!searchUser){
-            return res.status(404).json({message : "User not found", status : false})
+        if(!searchUser || searchUser.length === 0){
+            return res.status(400).json({message : "User not found", status : false})
         }
         res.status(200).json({message : "User found", status : true, searchUser})
     } catch(error){
@@ -38,6 +39,8 @@ const accessChat = async(req, res) => {
             { users: { $elemMatch: { $eq: userId } } },
             ],
         }).populate("users", "-password").populate("latestMsg")
+        console.log(isChat)
+        // console.log('///////')
 
         isChat = await userModel.populate(isChat, {
             path: "latestMessage.sender",
@@ -46,16 +49,19 @@ const accessChat = async(req, res) => {
         console.log(isChat)
 
         if(isChat.length > 0){
+            console.log('exit chat')
             res.status(200).json({isChat : isChat, status : true})
         }
         else{
+            console.log('create chat')
             const chatData = {
                 chatName : "sender",
                 isGroupChat : false,
                 users : [req.user.id, userId],
             }
             const createChat = await chatModel.create(chatData);
-            const fullChat = await chatModel.findById({_id : createChat._id}).populate("users", "-password")
+            console.log(createChat, "createChat") 
+            const fullChat = await chatModel.findById({_id : createChat._id}).populate("users", "-password") // populate method use to get the data from other collection using the id of that collection
             res.status(200).json(fullChat);
         }
 
@@ -65,21 +71,28 @@ const accessChat = async(req, res) => {
 }
 
 
-
+// fetch chats of a user
 const fetchChats = async(req, res) => {
     try{
-        console.log(req.user.id)
-        let chats = await chatModel.find({users : {$elemMatch : {$eq : req.user.id}}}).populate("users", "-password").populate("groupAdmin", "-password").populate("latestMessage").sort({updatedAt : -1})
+        // let chats = await chatModel.find({users : {$elemMatch : {$eq : req.user.id}}}).populate("groupAdmin", "-password").populate("latestMessage").sort({updatedAt : -1})
 
-        chats = await userModel.populate(chats, {
-            path: "latestMessage.sender",
-            select: "name email",
-        });
-        console.log(chats)
-
+        // chats = await userModel.populate(chats, {
+        //     path: "latestMessage.sender",
+        //     select: "name email",
+        // });
+        await chatModel.find({users : {$elemMatch : {$eq : req.user.id}}}).populate("users", "-password")
+        .populate("groupAdmin", "-password").populate("latestMsg").sort({updatedAt : -1}).then(async (result) => {
+            result = await userModel.populate(result, {
+                path: "latestMsg.sender",
+                select: "name email userImg",
+            })
+            res.status(200).json({chats : result, status : true})
+        } )  
+        
         
 
-        res.status(200).json({chats : chats, status : true})
+
+        // res.status(200).json({chats : result, status : true})
     } catch(error){
         res.status(500).json({message : error, status : false})
     }
@@ -88,14 +101,26 @@ const fetchChats = async(req, res) => {
 
 const createGroup = async(req, res) => {
     const {users, name} = req.body;
-
+    console.log(users, name)
     try{
+        // var user = JSON.parse(req.body.users);
+        // if(!users || !name){
+        //     res.status(400).json({message : "All fields are required", status : false});
+        // }
+        
         if(users.length < 2){
             res.status(400).json({message : "Please select atleast 2 users", status : false});
         }
 
-        let usersData = JSON.parse(users)
+        const existingGrp = await chatModel.find({chatName : name});
+        console.log(existingGrp, "existingGrp")
+        if(existingGrp.length > 0){
+            return res.status(400).json({message : "Group name already exist", status : false});
+        }
+        // let usersData =
+        let usersData = users
         usersData.push(req.user.id)
+        console.log(usersData)
 
 
         const groupData = {
@@ -112,7 +137,7 @@ const createGroup = async(req, res) => {
         res.status(200).json({group : fullGroup, status : true})
 
     } catch(error){
-        res.status(500).json({message : error, status : false})
+        res.status(500).json({message : error.message, status : false})
     }
 }
 
@@ -169,6 +194,22 @@ const removeUserGrp = async(req, res) => {
 }
 
 
+const findUser = async(req, res) => {
+    try {
+        console.log(req.user.id);
+        const userId = req.user.id;
+        if(!userId){
+            return res.status(400).json({message : "User id is required", status : false});
+        }
+        const users = await userModel.findById(userId).select("-password")
+        // const users = await userModel.find({})
+        res.json(users)
+      } catch (error) {
+        console.log(error);
+      }
+}
+
+
 module.exports = {
     searchUser,
     accessChat,
@@ -176,5 +217,6 @@ module.exports = {
     createGroup,
     renameGroup,
     addToGroup,
-    removeUserGrp
+    removeUserGrp,
+    findUser
 }
